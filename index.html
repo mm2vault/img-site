@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>mm2vault — Resim Yükle</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #0d1117;
+    color: #e6edf3;
+    min-height: 100vh;
+    padding: 20px;
+  }
+  .container { max-width: 900px; margin: 0 auto; }
+  h1 {
+    text-align: center;
+    font-size: 2rem;
+    margin-bottom: 8px;
+    background: linear-gradient(90deg, #58a6ff, #a371f7);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .subtitle {
+    text-align: center;
+    color: #8b949e;
+    margin-bottom: 30px;
+    font-size: 0.9rem;
+  }
+  .token-box {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 20px;
+  }
+  .token-box label {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 0.85rem;
+    color: #8b949e;
+  }
+  .token-box input {
+    width: 100%;
+    padding: 10px 12px;
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    color: #e6edf3;
+    font-size: 0.85rem;
+    font-family: monospace;
+  }
+  .token-box input:focus {
+    outline: none;
+    border-color: #58a6ff;
+  }
+  .token-box button {
+    margin-top: 10px;
+    padding: 8px 16px;
+    background: #238636;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.85rem;
+  }
+  .token-box button:hover { background: #2ea043; }
+  .status {
+    margin-top: 8px;
+    font-size: 0.8rem;
+    color: #3fb950;
+  }
+  .dropzone {
+    border: 2px dashed #30363d;
+    border-radius: 12px;
+    padding: 60px 20px;
+    text-align: center;
+    background: #161b22;
+    transition: all 0.2s;
+    cursor: pointer;
+    margin-bottom: 20px;
+  }
+  .dropzone:hover, .dropzone.dragover {
+    border-color: #58a6ff;
+    background: #1c2128;
+  }
+  .dropzone .icon { font-size: 3rem; margin-bottom: 12px; }
+  .dropzone .text { font-size: 1.1rem; margin-bottom: 6px; }
+  .dropzone .hint { color: #8b949e; font-size: 0.85rem; }
+  .results { display: flex; flex-direction: column; gap: 16px; }
+  .result-card {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 12px;
+    padding: 16px;
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+  }
+  .result-card img {
+    width: 100px;
+    height: 100px;
+    object-fit: cover;
+    border-radius: 8px;
+    flex-shrink: 0;
+  }
+  .result-info { flex: 1; min-width: 0; }
+  .result-info .filename {
+    font-weight: 600;
+    margin-bottom: 8px;
+    word-break: break-all;
+    font-size: 0.9rem;
+  }
+  .link-row { display: flex; gap: 8px; margin-bottom: 6px; align-items: center; }
+  .link-row input {
+    flex: 1;
+    padding: 6px 10px;
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    color: #e6edf3;
+    font-size: 0.75rem;
+    font-family: monospace;
+    min-width: 0;
+  }
+  .link-row button {
+    padding: 6px 10px;
+    background: #21262d;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    color: #e6edf3;
+    cursor: pointer;
+    font-size: 0.75rem;
+    white-space: nowrap;
+  }
+  .link-row button:hover { background: #30363d; }
+  .link-row .label {
+    width: 70px;
+    font-size: 0.75rem;
+    color: #8b949e;
+    flex-shrink: 0;
+  }
+  .loading { text-align: center; padding: 20px; color: #58a6ff; }
+  .error { color: #f85149; padding: 10px; font-size: 0.85rem; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>mm2vault</h1>
+  <p class="subtitle">Resim yükle — Link al</p>
+
+  <div class="token-box" id="tokenBox">
+    <label>🔑 GitHub Token (sadece bir kez girmen yeter, tarayıcıda saklanır)</label>
+    <input type="password" id="tokenInput" placeholder="github_pat_...">
+    <button onclick="saveToken()">Kaydet</button>
+    <div class="status" id="tokenStatus"></div>
+  </div>
+
+  <div class="dropzone" id="dropzone">
+    <div class="icon">📁</div>
+    <div class="text">Resimleri buraya sürükle</div>
+    <div class="hint">veya tıkla ve seç — PNG, JPG, GIF, WEBP</div>
+    <input type="file" id="fileInput" multiple accept="image/*" style="display:none">
+  </div>
+
+  <div class="loading" id="loading" style="display:none">⏳ Yükleniyor...</div>
+  <div class="error" id="error" style="display:none"></div>
+  <div class="results" id="results"></div>
+</div>
+
+<script>
+const USERNAME = 'mm2vault';
+const REPO = 'img-store';
+const BRANCH = 'main';
+
+const tokenBox = document.getElementById('tokenBox');
+const tokenInput = document.getElementById('tokenInput');
+const tokenStatus = document.getElementById('tokenStatus');
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const results = document.getElementById('results');
+const loading = document.getElementById('loading');
+const errorEl = document.getElementById('error');
+
+let token = localStorage.getItem('gh_token') || '';
+
+if (token) {
+  tokenBox.style.display = 'none';
+}
+
+function saveToken() {
+  const val = tokenInput.value.trim();
+  if (!val) return;
+  token = val;
+  localStorage.setItem('gh_token', val);
+  tokenStatus.textContent = '✅ Kaydedildi!';
+  setTimeout(() => { tokenBox.style.display = 'none'; }, 800);
+}
+
+dropzone.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
+
+dropzone.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  dropzone.classList.add('dragover');
+});
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+dropzone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dropzone.classList.remove('dragover');
+  handleFiles(e.dataTransfer.files);
+});
+
+function showError(msg) {
+  errorEl.textContent = '❌ ' + msg;
+  errorEl.style.display = 'block';
+  setTimeout(() => { errorEl.style.display = 'none'; }, 5000);
+}
+
+async function handleFiles(files) {
+  if (!token) {
+    showError('Önce token gir!');
+    tokenBox.style.display = 'block';
+    return;
+  }
+  const images = Array.from(files).filter(f => f.type.startsWith('image/'));
+  if (images.length === 0) return;
+
+  loading.style.display = 'block';
+  loading.textContent = `⏳ ${images.length} resim yükleniyor...`;
+
+  for (const file of images) {
+    try {
+      await uploadFile(file);
+    } catch (err) {
+      showError(file.name + ': ' + err.message);
+    }
+  }
+
+  loading.style.display = 'none';
+}
+
+async function uploadFile(file) {
+  const ext = file.name.split('.').pop();
+  const timestamp = Date.now();
+  const random = Math.random().toString(36).substring(2, 8);
+  const filename = `${timestamp}-${random}.${ext}`;
+  const path = `images/${filename}`;
+
+  const base64 = await fileToBase64(file);
+  const content = base64.split(',')[1];
+
+  const res = await fetch(
+    `https://api.github.com/repos/${USERNAME}/${REPO}/contents/${path}`,
+    {
+      method: 'PUT',
+      headers: {
+        'Authorization': `token ${token}`,
+        'Accept': 'application/vnd.github.v3+json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        message: `upload: ${filename}`,
+        content: content,
+        branch: BRANCH
+      })
+    }
+  );
+
+  if (!res.ok) {
+    const err = await res.json();
+    if (res.status === 401) {
+      localStorage.removeItem('gh_token');
+      token = '';
+      tokenBox.style.display = 'block';
+      throw new Error('Token geçersiz, yeniden gir');
+    }
+    throw new Error(err.message || 'Yükleme başarısız');
+  }
+
+  const rawUrl = `https://raw.githubusercontent.com/${USERNAME}/${REPO}/${BRANCH}/${path}`;
+  const cdnUrl = `https://cdn.jsdelivr.net/gh/${USERNAME}/${REPO}@${BRANCH}/${path}`;
+
+  addResult(file.name, cdnUrl);
+}
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function addResult(filename, url) {
+  const card = document.createElement('div');
+  card.className = 'result-card';
+  card.innerHTML = `
+    <img src="${url}" alt="${filename}">
+    <div class="result-info">
+      <div class="filename">${filename}</div>
+      <div class="link-row">
+        <span class="label">Direct:</span>
+        <input type="text" value="${url}" readonly>
+        <button onclick="copy(this)">Kopyala</button>
+      </div>
+      <div class="link-row">
+        <span class="label">Markdown:</span>
+        <input type="text" value="![${filename}](${url})" readonly>
+        <button onclick="copy(this)">Kopyala</button>
+      </div>
+      <div class="link-row">
+        <span class="label">HTML:</span>
+        <input type="text" value='<img src="${url}" alt="${filename}">' readonly>
+        <button onclick="copy(this)">Kopyala</button>
+      </div>
+    </div>
+  `;
+  results.prepend(card);
+}
+
+function copy(btn) {
+  const input = btn.previousElementSibling;
+  input.select();
+  navigator.clipboard.writeText(input.value).then(() => {
+    const orig = btn.textContent;
+    btn.textContent = '✅';
+    setTimeout(() => { btn.textContent = orig; }, 1000);
+  });
+}
+</script>
+</body>
+</html>
